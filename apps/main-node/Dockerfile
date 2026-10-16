@@ -4,6 +4,11 @@
 #
 # Build:
 #   docker build -f apps/main-node/Dockerfile -t openma/main-node:dev .
+#
+# Build (Postgres-only, no native SQLite compile):
+#   docker build -f apps/main-node/Dockerfile \
+#     --build-arg DB_BACKEND=postgres -t openma/main-node:pg .
+#
 # Run (standalone):
 #   docker run --rm -p 8787:8787 \
 #     -v $(pwd)/data:/app/data \
@@ -21,12 +26,20 @@
 # ─── Stage 1: deps (and native compile) ────────────────────────────────────
 FROM node:22-slim AS deps
 
+# DB_BACKEND controls whether native build tools are installed for
+# better-sqlite3 compilation. Set to "postgres" (or "mysql") to skip them
+# entirely. Default "sqlite" preserves the original behaviour.
+ARG DB_BACKEND=sqlite
+
 # better-sqlite3 ships a prebuilt binary for common targets but on
 # arm64-glibc-Linux it falls back to compiling from source. python3 +
-# build-essential cover both.
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 build-essential \
-  && rm -rf /var/lib/apt/lists/*
+# build-essential cover both. When DB_BACKEND != sqlite these are skipped,
+# keeping the image smaller and the build faster.
+RUN if [ "$DB_BACKEND" = "sqlite" ]; then \
+      apt-get update \
+      && apt-get install -y --no-install-recommends python3 build-essential \
+      && rm -rf /var/lib/apt/lists/*; \
+    fi
 
 WORKDIR /app
 
@@ -44,8 +57,15 @@ COPY packages packages
 # Install workspace deps. --frozen-lockfile fails fast on lockfile drift.
 # Build approval list at .pnpm-approve-builds.json covers better-sqlite3 +
 # esbuild + workerd + the anthropic tokeniser.
+#
+# When DB_BACKEND != sqlite we tell pnpm to skip optional dependencies so
+# better-sqlite3 (now an optionalDependency) is never downloaded or compiled.
 RUN corepack enable \
-  && pnpm install --frozen-lockfile
+  && if [ "$DB_BACKEND" = "sqlite" ]; then \
+       pnpm install --frozen-lockfile; \
+     else \
+       pnpm install --frozen-lockfile --no-optional; \
+     fi
 
 # Now bring in the source code (cache-busts only on src changes, not deps).
 COPY apps/main-node apps/main-node

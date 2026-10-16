@@ -12,9 +12,20 @@ export type {
 // imports stay as before:
 //   import { CfD1SqlClient } from "@open-managed-agents/sql-client/adapters/cf-d1";
 
-// better-sqlite3 / postgres adapters are exported here because neither has
-// CF type dependencies; the drivers themselves are peer deps so this remains
-// import-safe when neither is installed (the createXxxClient calls are the
-// only things that touch them).
-export { createBetterSqlite3SqlClient } from "./adapters/better-sqlite3";
+// better-sqlite3 adapter is lazy-loaded so that Postgres-only consumers
+// never trigger a top-level import of better-sqlite3 (a native C++ addon
+// requiring compilation). The function itself already dynamic-imports the
+// driver; this wrapper avoids even parsing the adapter module at startup.
+export async function createBetterSqlite3SqlClient(
+  ...args: Parameters<
+    typeof import("./adapters/better-sqlite3").createBetterSqlite3SqlClient
+  >
+): ReturnType<
+  typeof import("./adapters/better-sqlite3").createBetterSqlite3SqlClient
+> {
+  const { createBetterSqlite3SqlClient: create } = await import(
+    "./adapters/better-sqlite3"
+  );
+  return create(...args);
+}
 export { createPostgresSqlClient } from "./adapters/postgres";

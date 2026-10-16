@@ -22,6 +22,8 @@ services:
     build:
       context: .
       dockerfile: apps/main-node/Dockerfile
+      args:
+        DB_BACKEND: postgres
     image: openma/main-node:dev
     container_name: oma-server
     ports:

@@ -28,7 +28,6 @@ import {
   type Logger,
 } from "@open-managed-agents/observability";
 import {
-  createBetterSqlite3SqlClient,
   createPostgresSqlClient,
   type SqlClient,
 } from "@open-managed-agents/sql-client";
@@ -336,6 +335,9 @@ if (usePostgres) {
 } else {
   const dbPath = process.env.DATABASE_PATH ?? "./data/oma.db";
   mkdirSync(dirname(dbPath), { recursive: true });
+  const { createBetterSqlite3SqlClient } = await import(
+    "@open-managed-agents/sql-client"
+  );
   sql = await createBetterSqlite3SqlClient(dbPath);
   const { drizzle: drizzleBetterSqlite3 } = await import("drizzle-orm/better-sqlite3");
   const BetterSqlite3 = (await import("better-sqlite3")).default;
@@ -2409,9 +2411,12 @@ function bridgeAsInstallProxy(bridge: NodeInstallBridge): InstallProxyForwarder 
  * to run the better-auth schema apply against the auth db (separate
  * connection from the main SqlClient). We don't ship a full adapter — only
  * .exec() is needed.
+ *
+ * Uses a structural type so this module compiles without better-sqlite3
+ * installed (Postgres-only images skip the native addon entirely).
  */
 function betterSqliteAsSqlClient(
-  db: import("better-sqlite3").Database,
+  db: { exec(sql: string): void },
 ): SqlClient {
   return {
     exec: async (s: string) => {
