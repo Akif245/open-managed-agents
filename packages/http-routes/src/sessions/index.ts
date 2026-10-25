@@ -712,6 +712,9 @@ export function buildSessionRoutes(deps: SessionRoutesDeps) {
     const t = c.var.tenant_id;
     const sess = await services.sessions.get({ tenantId: t, sessionId: id });
     if (!sess) return c.json({ error: "Session not found" }, 404);
+    if ((sess as unknown as { archived_at?: string | null }).archived_at) {
+      return c.json({ error: "Session is archived and cannot receive new events" }, 409);
+    }
     const body = await c.req
       .json<{ content: string | ContentBlock[] }>()
       .catch(() => ({ content: "" as string | ContentBlock[] }));
